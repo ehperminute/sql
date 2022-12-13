@@ -1,6 +1,5 @@
 df['start'] = pd.to_datetime(df['sessionStart'])
 df['end'] = pd.to_datetime(df['sessionEnd'])
-df['diff'] = df['end'] - df['start']
 df
 
 def join_times(x):
@@ -11,9 +10,8 @@ def join_times(x):
     mergdf['newwin'] = mergdf['running'].eq(1) & mergdf['what'].eq(1)
     mergdf['group'] = mergdf['newwin'].cumsum()
     x['group'] = mergdf['group'].loc[mergdf['what'].eq(1)]
-    res = x.groupby('group').agg({'diff':'sum', 'start':'first'})
-    res['end'] = res.apply(lambda x : x['start'] + x['diff'] + pd.to_timedelta(5), axis=1)
+    res = x.groupby('group').agg({'start':'first', 'end':'max'})
     return res
     
-ddf = df.groupby(['deviceID']).apply(join_times).reset_index().drop(['group', 'diff'], axis=1)
+ddf = df.groupby(['deviceID']).apply(join_times).reset_index().drop(['group'], axis=1)
 ddf
