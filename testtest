@@ -1,0 +1,19 @@
+df['start'] = pd.to_datetime(df['sessionStart'])
+df['end'] = pd.to_datetime(df['sessionEnd'])
+df['diff'] = df['end'] - df['start']
+df
+
+def join_times(x):
+    startdf = pd.DataFrame({'time':x['start'], 'what':1})
+    enddf = pd.DataFrame({'time':x['end'], 'what':-1})
+    mergdf = pd.concat([startdf, enddf]).sort_values('time')
+    mergdf['running'] = mergdf['what'].cumsum()
+    mergdf['newwin'] = mergdf['running'].eq(1) & mergdf['what'].eq(1)
+    mergdf['group'] = mergdf['newwin'].cumsum()
+    x['group'] = mergdf['group'].loc[mergdf['what'].eq(1)]
+    res = x.groupby('group').agg({'diff':'sum', 'start':'first'})
+    res['end'] = res.apply(lambda x : x['start'] + x['diff'] + pd.to_timedelta(5), axis=1)
+    return res
+    
+ddf = df.groupby(['deviceID']).apply(join_times).reset_index().drop(['group', 'diff'], axis=1)
+ddf
