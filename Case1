@@ -1,0 +1,167 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "bdb1184d-9ade-4d6b-aaab-294dcd55e5c1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "import numpy as np"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "674bd307-287d-4215-b6b3-cb570cad7fb6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# filename\n",
+    "file = 'case1_data.csv'\n",
+    "\n",
+    "# read file\n",
+    "df = pd.read_csv(file)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "a7baa34b-b02e-4d5e-9c3f-0a3c6923151d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# converting data\n",
+    "df['sessionEnd'] = pd.to_datetime(df['sessionEnd'])\n",
+    "\n",
+    "# not needed but just in case\n",
+    "df = df[df['durationMinutes'] > 0]\n",
+    "\n",
+    "# creating date column\n",
+    "df['dt'] = df['sessionEnd'].apply(lambda x: x.date())\n",
+    "\n",
+    "# calculating how much time passed from beggining of the day\n",
+    "df['minutesFromStartOfTheDay'] = (df['sessionEnd'] - pd.to_datetime(df['dt'])).dt.total_seconds() / 60\n",
+    "\n",
+    "# correcting time\n",
+    "df['correctDuration'] = np.minimum(df['durationMinutes'], df['minutesFromStartOfTheDay'])\n",
+    "\n",
+    "# calculating sessionStart column\n",
+    "df['sessionStart'] = df['sessionEnd'] - pd.to_timedelta(df['correctDuration'], unit='m')\n",
+    "\n",
+    "# resulting table\n",
+    "df = df[['deviceID', 'sessionStart', 'sessionEnd']].sort_values(by=['deviceID', 'sessionStart']).reset_index(drop=True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "48367081-b4b1-4e2e-bbec-563f7f938269",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\SERGEY~1.SMY\\AppData\\Local\\Temp/ipykernel_28044/2570244334.py:8: SettingWithCopyWarning: \n",
+      "A value is trying to be set on a copy of a slice from a DataFrame\n",
+      "\n",
+      "See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy\n",
+      "  df['sessionStart'][i] = df['sessionStart'][i-1]\n"
+     ]
+    }
+   ],
+   "source": [
+    "# dealing with overlapping datetime intervals\n",
+    "for i in range(1, df.shape[0]):\n",
+    "    curr_id = df['deviceID'][i]\n",
+    "    prev_id = df['deviceID'][i-1]\n",
+    "    \n",
+    "    if curr_id == prev_id:\n",
+    "        if df['sessionStart'][i] < df['sessionEnd'][i-1]:\n",
+    "            df['sessionStart'][i] = df['sessionStart'][i-1]          \n",
+    "            df.drop(i-1, axis='index', inplace=True)\n",
+    "\n",
+    "# recalculating duration\n",
+    "df['durationMinutes'] = (df['sessionEnd'] - df['sessionStart']) / pd.Timedelta(minutes=1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "854e02db-3a7a-46d9-841f-db8806ba99af",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# agg final table\n",
+    "\n",
+    "df_grouped = (\n",
+    "    df.drop_duplicates()\n",
+    "    .groupby(['deviceID'])['durationMinutes'].sum()\n",
+    "    .reset_index()\n",
+    "    .rename(columns={'durationMinutes': 'totalTimeSpent'})\n",
+    "    .sort_values(by='totalTimeSpent', ascending=False)\n",
+    ")\n",
+    "\n",
+    "# finding outliers\n",
+    "perc = np.percentile(df_grouped['totalTimeSpent'], [1, 99])\n",
+    "\n",
+    "# cleaning grouped table\n",
+    "df_grouped_clean = (\n",
+    "    df_grouped[\n",
+    "        (df_grouped['totalTimeSpent'] < perc[-1]) &\n",
+    "        (df_grouped['totalTimeSpent'] > perc[0])\n",
+    "    ] \n",
+    ")\n",
+    "\n",
+    "# saving data to excel\n",
+    "writer = pd.ExcelWriter('output_data.xlsx', engine='xlsxwriter')   \n",
+    "\n",
+    "df_grouped.to_excel(writer,sheet_name='total_data', index=False)\n",
+    "df_grouped.describe().to_excel(writer,sheet_name='total_data_describe')\n",
+    "df_grouped_clean.to_excel(writer,sheet_name='clean_data', index=False)\n",
+    "df_grouped_clean.describe().to_excel(writer,sheet_name='clean_data_describe')\n",
+    "\n",
+    "writer.save()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "5b86b57e-dcd5-424b-920c-3133703f2418",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "758fac6e-97dd-4433-9fed-f610f67248e9",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.7"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
